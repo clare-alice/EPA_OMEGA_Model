@@ -470,7 +470,7 @@ class OMEGABatchObject(OMEGABase):
             The value of the batch setting, taken from the first data column of the batch file
 
         """
-        return self.dataframe.loc[param_name][0]
+        return self.dataframe.loc[param_name].iloc[0]
 
     def parse_parameter(self, param_name, session_num):
         """
@@ -486,7 +486,7 @@ class OMEGABatchObject(OMEGABase):
             evaluating the raw parameter string (i.e. for tuples or dicts in the batch file inputs)
 
         """
-        raw_param = self.dataframe.loc[param_name][session_num]
+        raw_param = self.dataframe.loc[param_name, session_num]
         params_dict = {'TRUE': True,
                        'FALSE': False,
                        }
@@ -515,7 +515,10 @@ class OMEGABatchObject(OMEGABase):
             Nothing, sets the value for the parameter in the given session in the batch dataframe
 
         """
-        self.dataframe.loc[param_name][session_num] = value
+        if isinstance(value, (dict, list, tuple)):
+            self.dataframe.at[param_name, session_num] = value
+        else:
+            self.dataframe.loc[param_name, session_num] = value
 
     def parse_session_params(self, session_num, verbose=False):
         """
@@ -614,7 +617,7 @@ class OMEGABatchObject(OMEGABase):
             num_expanded_columns = np.prod(df_ff_dimensions_vector)
             # expand variations and write to dfx
             for variation_index in range(0, num_expanded_columns):
-                column_name = self.dataframe.loc['Session Name'][session_num]
+                column_name = self.dataframe.loc['Session Name', session_num]
                 session_name = column_name
                 if num_expanded_columns > 1:  # expand variations
                     column_name = column_name + '_%d' % variation_index
@@ -627,11 +630,11 @@ class OMEGABatchObject(OMEGABase):
                             if (expanded_session_num == 0) or (param_index >= session_params_start_index):
                                 # copy all data for df_column 0 (includes batchsettings) or
                                 # just session settings for subsequent columns
-                                if type(self.dataframe.loc[param_name][session_num]) is tuple:
+                                if type(self.dataframe.loc[param_name, session_num]) is tuple:
                                     # index tuple and get this variations element
-                                    value = self.dataframe.loc[param_name][session_num][ff_param_indices[param_index]]
+                                    value = self.dataframe.loc[param_name, session_num][ff_param_indices[param_index]]
                                 else:
-                                    value = self.dataframe.loc[param_name][session_num]  # else copy source value
+                                    value = self.dataframe.loc[param_name, session_num]  # else copy source value
 
                                 if value == []:
                                     # special case for assigning empty list (occurs with some developer settings)
@@ -648,8 +651,8 @@ class OMEGABatchObject(OMEGABase):
                                         session_name = session_name + '-' + acronyms_dict[param_name] + '=' + str(value)
                                     else:
                                         msg = 'Unsupported multi-value field %s = %s in session "%s"' % \
-                                                        (param_name, self.dataframe.loc[param_name][session_num],
-                                                         self.dataframe.loc['Session Name'][session_num])
+                                                        (param_name, self.dataframe.loc[param_name, session_num],
+                                                         self.dataframe.loc['Session Name', session_num])
                                         self.batch_log.logwrite(msg)
                                         raise Exception(msg)
                     dfx.loc['Session Name', column_name] = session_name
@@ -668,7 +671,7 @@ class OMEGABatchObject(OMEGABase):
         """
         self.name = self.read_parameter('Batch Name')
         if self.settings.analysis_final_year is not None:
-            self.dataframe.loc['Analysis Final Year'][0] = self.settings.analysis_final_year
+            self.dataframe.loc['Analysis Final Year', 0] = self.settings.analysis_final_year
         self.settings.analysis_final_year = int(self.read_parameter('Analysis Final Year'))
         self.settings.analysis_dollar_basis = self.read_parameter('Analysis Dollar Basis')
 
@@ -780,7 +783,7 @@ class OMEGASessionObject(OMEGABase):
 
         """
         try:
-            param = self.batch.dataframe.loc[param_name][self.num]
+            param = self.batch.dataframe.loc[param_name].iloc[self.num]
             if math.isnan(param) and default_value is not None:
                 param = default_value
         except:
@@ -1134,6 +1137,8 @@ def run_bundled_sessions(options, remote_batchfile, session_list):
     batch.batch_log = OMEGABatchLog(options)
     batch.batch_log.logwrite('REMOTE BATCHFILE = %s' % remote_batchfile)
     batch.dataframe = pd.read_csv(remote_batchfile, index_col=0)
+    batch.dataframe.columns = range(len(batch.dataframe.columns))
+    batch.dataframe = batch.dataframe[batch.dataframe.index.notna()]
     batch.dataframe.replace(to_replace={'True': True, 'False': False, 'TRUE': True, 'FALSE': False},
                             inplace=True)
     batch.dataframe.drop('Type', axis=1, inplace=True,
@@ -1302,6 +1307,9 @@ def run_omega_batch(no_validate=False, no_sim=False, bundle_path=None, no_bundle
             batch.dataframe = pd.read_csv(options.batch_file, index_col=0)
         else:
             batch.dataframe = pd.read_excel(options.batch_file, index_col=0, sheet_name="Sessions")
+        batch.dataframe.columns = range(len(batch.dataframe.columns))
+        batch.dataframe = batch.dataframe[batch.dataframe.index.notna()]
+        batch.dataframe = batch.dataframe[~batch.dataframe.index.duplicated(keep='first')]
 
         batch.dataframe = batch.dataframe.replace(
             to_replace={'True': True, 'False': False, 'TRUE': True, 'FALSE': False})
@@ -1312,7 +1320,8 @@ def run_omega_batch(no_validate=False, no_sim=False, bundle_path=None, no_bundle
         if not options.no_bundle:
             if not options.timestamp:
                 options.timestamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
-            batch.dataframe.loc['Batch Name'][0] = batch.name = options.timestamp + '_' + batch.name
+            batch.name = options.timestamp + '_' + batch.name
+        batch.dataframe.loc['Batch Name', 0] = batch.name
 
         # validate session files
         validate_folder(options.bundle_path_root)

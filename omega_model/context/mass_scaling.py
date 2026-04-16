@@ -103,19 +103,25 @@ class MassScaling(OMEGABase):
         # locals_dict = locals()
         nmc_share_dict_bev = omega_globals.options.nmc_share_BEV
         nmc_share_dict_phev = omega_globals.options.nmc_share_PHEV
+        import ast
+        if isinstance(nmc_share_dict_bev, str):
+            nmc_share_dict_bev = ast.literal_eval(nmc_share_dict_bev)
+        if isinstance(nmc_share_dict_phev, str):
+            nmc_share_dict_phev = ast.literal_eval(nmc_share_dict_phev)
+        nmc_model_year_key = lambda y: int(y)
 
         if type(vehicle) is pd.DataFrame:
             nmc_model_year = vehicle.model_year.iloc[0]
         else:
             nmc_model_year = vehicle.model_year
 
-        if nmc_model_year in nmc_share_dict_bev:
-            nmc_share_bev = nmc_share_dict_bev[nmc_model_year]
+        if int(nmc_model_year) in nmc_share_dict_bev:
+            nmc_share_bev = nmc_share_dict_bev[int(nmc_model_year)]
         else:
             nmc_share_bev = nmc_share_dict_bev[max(nmc_share_dict_bev.keys())]
 
-        if nmc_model_year in nmc_share_dict_phev:
-            nmc_share_phev = nmc_share_dict_phev[nmc_model_year]
+        if int(nmc_model_year) in nmc_share_dict_phev:
+            nmc_share_phev = nmc_share_dict_phev[int(nmc_model_year)]
         else:
             nmc_share_phev = nmc_share_dict_phev[max(nmc_share_dict_phev.keys())]
 
